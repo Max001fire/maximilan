@@ -42,6 +42,10 @@ export class Telemetry {
     this.live = { speed: 0, lean: 0, latG: 0, lonG: 0, totalG: 0, pos: null, heading: null, accuracy: null };
     this.up = null; // Hochachse im Geräte-Koordinatensystem
     this.calib = [];
+    this.gyroBias = 0; // rad/s, Nullpunkt-Drift des Gyroskops
+    this.manualCenter = false; // Zentrierpunkt vom Fahrer gesetzt
+    this.recent = []; // letzte Sensorwerte für den Zentrierpunkt
+    this.centering = null;
     this.watchId = null;
     this.demo = null;
     this.reset();
@@ -98,6 +102,47 @@ export class Telemetry {
   calibrate() {
     this.up = null;
     this.calib = [];
+    this.gyroBias = 0;
+    this.manualCenter = false;
+  }
+
+  // ---------- Zentrierpunkt (Nullpunkt der Schräglage) ----------
+  // Fahrzeug gerade halten (stehend oder geradeaus fahrend). 2 Sekunden lang
+  // werden Schwerkraftrichtung und Gyro-Drift gemittelt; danach ist "gerade" = 0°.
+  startCentering(done, ms = 2000) {
+    if (!this._motionSeen) {
+      // ohne Bewegungssensoren: nur aktuellen Wert als Nullpunkt
+      this.leanOffset = (this.leanOffset || 0) + this.live.lean;
+      this.manualCenter = true;
+      done?.({ ok: true, sensors: false });
+      return;
+    }
+    this.centering = { samples: [], until: performance.now() + ms, done };
+  }
+
+  _finishCentering() {
+    const c = this.centering;
+    this.centering = null;
+    if (c.samples.length < 10) return c.done?.({ ok: false });
+    const sum = c.samples.reduce((a, x) => [a[0] + x.g[0], a[1] + x.g[1], a[2] + x.g[2]], [0, 0, 0]);
+    this.up = norm(sum);
+    const raw = c.samples.map((x) => dot(x.rr, this.up) * DEG);
+    this.gyroBias = raw.reduce((a, b) => a + b, 0) / raw.length;
+    this.leanOffset = 0;
+    this.live.lean = 0;
+    this.manualCenter = true;
+    c.done?.({ ok: true, sensors: true });
+  }
+
+  getCenter() {
+    return this.manualCenter && this.up ? { up: this.up, gyroBias: this.gyroBias } : null;
+  }
+
+  loadCenter(c) {
+    if (!c || !Array.isArray(c.up) || c.up.length !== 3) return;
+    this.up = norm(c.up);
+    this.gyroBias = Number(c.gyroBias) || 0;
+    this.manualCenter = true;
   }
 
   startRecording(vehicle) {
@@ -105,7 +150,7 @@ export class Telemetry {
     this.reset();
     this.stats.startedAt = Date.now();
     this.recording = true;
-    this.calibrate();
+    if (!this.manualCenter) this.calibrate(); // gespeicherten Zentrierpunkt behalten
   }
 
   stopRecording() {
@@ -185,6 +230,12 @@ export class Telemetry {
     const dt = this._lastMotion ? Math.min(0.2, (now - this._lastMotion) / 1000) : 0.016;
     this._lastMotion = now;
     const gVec = [aig.x, aig.y, aig.z];
+    const rrVec = [rr.beta, rr.gamma, rr.alpha]; // Grad/s um x, y, z
+
+    if (this.centering) {
+      this.centering.samples.push({ g: gVec, rr: rrVec });
+      if (performance.now() >= this.centering.until) this._finishCentering();
+    }
 
     // Kalibrieren: Schwerkraftrichtung (= Hochachse) mitteln, solange langsam
     if (!this.up) {
@@ -200,8 +251,10 @@ export class Telemetry {
     }
 
     // Drehrate um die Hochachse (Grad/s -> rad/s). alpha=z, beta=x, gamma=y
-    const omega = dot([rr.beta, rr.gamma, rr.alpha], this.up) * DEG;
-    this._applyYawRate(omega, dt, 0.25);
+    const omegaRaw = dot(rrVec, this.up) * DEG;
+    // Im Stand Gyro-Drift automatisch nachführen
+    if (this.live.speed < 1) this.gyroBias = lowpass(this.gyroBias, omegaRaw, dt, 2);
+    this._applyYawRate(omegaRaw - this.gyroBias, dt, 0.25);
 
     // Gesamt-G horizontal direkt vom Beschleunigungssensor (für Auto)
     const a = e.acceleration;
@@ -221,7 +274,7 @@ export class Telemetry {
     if (this.vehicle === 'motorcycle') {
       // links = negativ, rechts = positiv
       const phi = worldYaw ? Math.atan(ratio) : Math.asin(Math.max(-1, Math.min(1, ratio)));
-      const lean = v > 4 ? -phi / DEG : 0;
+      const lean = v > 4 ? -phi / DEG - (this.leanOffset || 0) : 0;
       this.live.lean = lowpass(this.live.lean, lean, dt, tau);
       if (this.recording && v > 4) {
         const l = Math.min(65, Math.abs(this.live.lean));

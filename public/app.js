@@ -1,4 +1,5 @@
 import { Telemetry, haversine, bearing } from './telemetry.js';
+import { apiUrl, wsUrl, inviteUrl, pushToCarPlay, onCarPlayAction, keepAwake } from './native.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -20,7 +21,7 @@ function toast(msg, ms = 2600) {
 }
 
 async function api(path, opts = {}) {
-  const r = await fetch('/api' + path, {
+  const r = await fetch(apiUrl(path), {
     method: opts.method || (opts.body ? 'POST' : 'GET'),
     headers: opts.body ? { 'Content-Type': 'application/json' } : {},
     body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -159,6 +160,7 @@ const tele = new Telemetry(({ live, stats, error }) => {
   updateMe();
   updateHud(live, stats);
   sendPos();
+  syncCarPlay();
   if (state.recording && tele.track.length) {
     const last = tele.track[tele.track.length - 1];
     const ll = layers.track.getLatLngs();
@@ -181,8 +183,13 @@ function gaugeSvg(live) {
       return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#4a5563" stroke-width="2"/>`;
     }).join('');
     const col = Math.abs(lean) > 45 ? '#e5484d' : Math.abs(lean) > 30 ? '#ffbf00' : '#2ec4b6';
-    return `<svg viewBox="0 0 150 84"><path d="M${lx} ${ly} A${r} ${r} 0 0 1 ${rx} ${ry}" fill="none" stroke="#2f3843" stroke-width="6" stroke-linecap="round"/>
-      ${ticks}<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${col}" stroke-width="5" stroke-linecap="round"/>
+    // Zentrierpunkt: Dreieck bei 0°, grün wenn gerade, Ring wenn Nullpunkt gesetzt
+    const centered = Math.abs(lean) < 2;
+    const cCol = centered ? '#80ed99' : '#94a0ad';
+    const center = `<path d="M${cx - 6} ${cy - r - 9} L${cx + 6} ${cy - r - 9} L${cx} ${cy - r - 1} Z" fill="${cCol}"/>
+      ${tele.manualCenter ? `<circle cx="${cx}" cy="${cy}" r="9" fill="none" stroke="#80ed99" stroke-width="1.5"/>` : ''}`;
+    return `<svg viewBox="0 -8 150 92"><path d="M${lx} ${ly} A${r} ${r} 0 0 1 ${rx} ${ry}" fill="none" stroke="#2f3843" stroke-width="6" stroke-linecap="round"/>
+      ${center}${ticks}<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${col}" stroke-width="5" stroke-linecap="round"/>
       <circle cx="${cx}" cy="${cy}" r="5" fill="${col}"/>
       <text x="${cx}" y="${cy - 22}" text-anchor="middle" fill="#eef2f6" font-size="20" font-weight="800">${Math.abs(Math.round(lean))}°</text>
       <text x="10" y="82" fill="#94a0ad" font-size="10">L</text><text x="134" y="82" fill="#94a0ad" font-size="10">R</text></svg>`;
@@ -207,12 +214,13 @@ function updateHud(live, stats) {
   $('#hudDist').textContent = fmt(stats.distance / 1000, 1);
   $('#hudTime').textContent = fmtTime(stats.startedAt ? (Date.now() - stats.startedAt) / 1000 : 0);
   $('#hudGauge').innerHTML = gaugeSvg(live);
+  $('#centerBtn').classList.toggle('hidden', state.vehicle !== 'motorcycle');
   $('#hudPeaks').textContent = state.vehicle === 'motorcycle'
     ? `Max. Schräglage ◀ ${Math.round(stats.maxLeanLeft)}°  |  ${Math.round(stats.maxLeanRight)}° ▶`
     : `Max: quer ${fmt(stats.maxLatG, 2)} g · Bremsen ${fmt(stats.maxBrakeG, 2)} g · Beschl. ${fmt(stats.maxAccelG, 2)} g`;
 }
 
-async function toggleRecording() {
+async function toggleRecording(fromCarPlay = false) {
   if (!state.recording) {
     await tele.requestPermissions();
     tele.startSensors();
@@ -233,6 +241,8 @@ async function toggleRecording() {
     }, 3000);
     hudTimer = setInterval(() => updateHud(tele.live, tele.stats), 1000);
     sendPos(true);
+    keepAwake(true);
+    syncCarPlay();
   } else {
     const { stats, track } = tele.stopRecording();
     state.recording = false;
@@ -242,7 +252,9 @@ async function toggleRecording() {
     $('#recordBtn').classList.remove('recording');
     $('#sensorHint').textContent = '';
     sendPos(true);
-    if (stats.distance < 50 && !confirm('Die Fahrt war sehr kurz. Trotzdem speichern?')) return;
+    keepAwake(false);
+    syncCarPlay();
+    if (stats.distance < 50 && !fromCarPlay && !confirm('Die Fahrt war sehr kurz. Trotzdem speichern?')) return;
     try {
       await api('/sessions', { body: { userId: state.user.id, rideCode: state.ride?.code, vehicle: state.vehicle, ...stats, track } });
     } catch (e) { toast('Speichern fehlgeschlagen: ' + e.message); }
@@ -281,12 +293,42 @@ function resultsTable(rows) {
     <td class="num">${moto ? Math.round(Math.max(r.maxLeanLeft, r.maxLeanRight)) + '°' : fmt(r.maxTotalG, 2)}</td></tr>`).join('')}</table>`;
 }
 
+// ---------- CarPlay ----------
+function syncCarPlay() {
+  const l = tele.live, st = tele.stats;
+  const here = l.pos;
+  const members = [...state.members.values()]
+    .filter((m) => m.userId !== state.user?.id)
+    .map((m) => ({ name: m.name, vehicle: m.vehicle, speed: Math.round(m.speed || 0),
+      distanceKm: here && m.lat != null ? Math.round(haversine(here, m) / 100) / 10 : -1, recording: !!m.recording }));
+  const spots = state.spots
+    .filter((x) => x.vehicles.includes(state.vehicle))
+    .map((x) => ({ id: x.id, name: x.name, lat: x.start.lat, lng: x.start.lng, difficulty: x.difficulty, description: x.description || '',
+      distanceKm: here ? Math.round(haversine(here, x.start) / 100) / 10 : -1 }))
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, 12);
+  pushToCarPlay({
+    vehicle: state.vehicle, recording: state.recording, centered: !!tele.manualCenter,
+    speed: Math.round(l.speed), lean: Math.round(l.lean || 0), latG: +(l.latG || 0).toFixed(2), totalG: +(l.totalG || 0).toFixed(2),
+    maxSpeed: Math.round(st.maxSpeed), avgSpeed: Math.round(st.avgSpeed), distanceKm: Math.round(st.distance / 100) / 10,
+    duration: Math.round(st.startedAt && state.recording ? (Date.now() - st.startedAt) / 1000 : st.duration || 0),
+    maxLeanLeft: Math.round(st.maxLeanLeft), maxLeanRight: Math.round(st.maxLeanRight),
+    maxLatG: +st.maxLatG.toFixed(2), maxBrakeG: +st.maxBrakeG.toFixed(2), maxTotalG: +st.maxTotalG.toFixed(2),
+    rideName: state.ride?.name || '', members, spots,
+  });
+}
+onCarPlayAction((action) => {
+  if (action === 'toggleRecording') toggleRecording(true);
+  else if (action === 'center') setLeanCenter();
+  else if (action === 'refresh') syncCarPlay();
+});
+
 // ---------- Live-Gruppe (WebSocket) ----------
 let ws = null;
 let wsRetry = 0;
 function connectRide(code) {
   if (ws) { ws.onclose = null; ws.close(); }
-  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  ws = new WebSocket(wsUrl());
   ws.onopen = () => { wsRetry = 0; ws.send(JSON.stringify({ type: 'join', code, userId: state.user.id })); };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
@@ -302,6 +344,7 @@ function connectRide(code) {
       state.members.set(msg.member.userId, msg.member);
       if (isNew) toast(`${msg.member.name} ist dabei 👋`);
       renderMembers();
+      syncCarPlay();
     } else if (msg.type === 'left') {
       const m = state.members.get(msg.userId);
       state.members.delete(msg.userId);
@@ -375,7 +418,7 @@ function leaveRide() {
 
 async function shareInvite() {
   if (!state.ride) return;
-  const url = `${location.origin}${location.pathname}?join=${state.ride.code}`;
+  const url = inviteUrl(state.ride.code);
   const text = `Fahr mit mir: „${state.ride.name}“ – Code ${state.ride.code}`;
   try {
     if (navigator.share) await navigator.share({ title: 'KurvenCrew', text, url });
@@ -387,6 +430,7 @@ async function shareInvite() {
 async function loadSpots() {
   try { state.spots = await api('/spots'); } catch (e) { toast(e.message); }
   renderSpots();
+  syncCarPlay();
 }
 
 function spotPopup(s) {
@@ -813,7 +857,27 @@ $('#addFriendBtn').onclick = async () => {
 $('#saveNameBtn').onclick = async () => {
   try { state.user = await api(`/users/${state.user.id}`, { method: 'PUT', body: { name: $('#profileName').value } }); toast('Gespeichert'); } catch (e) { toast(e.message); }
 };
-$('#calibrateBtn').onclick = () => { tele.calibrate(); toast('Handy 2 Sekunden still halten …'); };
+$('#calibrateBtn').onclick = () => { tele.calibrate(); store.set('center', null); toast('Kalibrierung zurückgesetzt – Handy 2 Sekunden still halten …'); };
+
+// Zentrierpunkt der Schräglage setzen: Motorrad gerade halten, 2 s mitteln
+async function setLeanCenter() {
+  if (tele.centering) return;
+  if (!state.recording && !tele.demo) { await tele.requestPermissions(); tele.startSensors(); }
+  $$('.center-btn').forEach((b) => b.classList.add('busy'));
+  toast('Motorrad gerade halten … 2 Sekunden', 2200);
+  // Sensoren brauchen einen Moment, bis die ersten Werte kommen
+  setTimeout(() => tele.startCentering((r) => {
+    $$('.center-btn').forEach((b) => b.classList.remove('busy'));
+    if (!r.ok) return toast('Keine Sensordaten – Bewegungssensoren erlauben und erneut versuchen');
+    const c = tele.getCenter();
+    if (c) store.set('center', c);
+    toast(r.sensors ? '⊙ Zentrierpunkt gesetzt – gerade = 0°' : '⊙ Nullpunkt gesetzt (ohne Bewegungssensoren nur grob)');
+    if (state.recording) updateHud(tele.live, tele.stats);
+    syncCarPlay();
+  }), tele.hasMotion ? 0 : 400);
+}
+$$('.center-btn').forEach((b) => (b.onclick = setLeanCenter));
+$('#hudGauge').onclick = () => state.vehicle === 'motorcycle' && setLeanCenter();
 $('#demoBtn').onclick = () => {
   if (tele.demo) {
     tele.stopDemo();
@@ -865,6 +929,7 @@ async function init() {
   if (uid) { try { state.user = await api(`/users/${uid}`); } catch {} }
   if (!state.user) state.user = await onboarding();
   setVehicle(state.user.vehicle, false);
+  tele.loadCenter(store.get('center'));
   loadSpots();
   const savedRoute = store.get('route');
   if (savedRoute) applyRoute(savedRoute);
@@ -877,6 +942,6 @@ async function init() {
     history.replaceState(null, '', location.pathname);
     joinRide(join);
   }
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && !window.Capacitor?.isNativePlatform?.()) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 init();

@@ -31,6 +31,7 @@
       <div><small>Zeit</small><b id="hudTime">0:00</b></div>
     </div>
     <div class="hud-peaks" id="hudPeaks"></div>
+    <button id="centerBtn" class="center-btn hud-center" title="Zentrierpunkt setzen: Motorrad gerade halten">⊙ Nullpunkt</button>
   </section>
 
   <div class="fab-stack">
@@ -165,11 +166,12 @@
         </div>
         <ul id="friendList" class="list"></ul>
         <h3>Sensoren</h3>
-        <div class="row">
-          <button id="calibrateBtn" class="btn small">Neu kalibrieren</button>
+        <div class="row wrap">
+          <button id="centerBtn2" class="btn small center-btn">⊙ Zentrierpunkt setzen</button>
+          <button id="calibrateBtn" class="btn small">Zurücksetzen</button>
           <button id="demoBtn" class="btn small">Demo-Fahrt (Simulation)</button>
         </div>
-        <p class="hint">Handy fest in der Halterung montieren und vor dem Losfahren 2 Sekunden still halten – dann wird die Hochachse automatisch kalibriert. Die Werte sind Schätzungen aus Handy-Sensoren, keine geeichten Messungen. Fahr verantwortungsvoll und halte dich an die Verkehrsregeln.</p>
+        <p class="hint">Handy fest in der Halterung montieren. <b>Zentrierpunkt:</b> Motorrad gerade hinstellen (oder geradeaus fahren) und „⊙ Zentrierpunkt setzen“ bzw. in der Fahrt-Anzeige auf „⊙ Nullpunkt“ oder den Tacho tippen – 2 Sekunden lang wird gemittelt, danach ist „gerade“ genau 0°. Der Zentrierpunkt bleibt gespeichert, bis du die Halterung änderst und „Zurücksetzen“ drückst. Die Werte sind Schätzungen aus Handy-Sensoren, keine geeichten Messungen. Fahr verantwortungsvoll und halte dich an die Verkehrsregeln.</p>
       </div>
     </div>
 
@@ -208,6 +210,8 @@
 
   <div id="toast" class="toast"></div>
 
+  <script src="config.js"></script>
+  <script src="vendor/capacitor.js"></script>
   <script src="vendor/leaflet/leaflet.js"></script>
   <script type="module" src="app.js"></script>
 </body>

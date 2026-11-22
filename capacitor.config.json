@@ -1,0 +1,12 @@
+{
+  "appId": "de.kurvencrew.app",
+  "appName": "KurvenCrew",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#111418"
+  },
+  "android": {
+    "backgroundColor": "#111418"
+  }
+}

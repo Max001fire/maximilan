@@ -48,6 +48,14 @@ body.sheet-min { --sheet-h: 118px; }
 .hud-stats div { text-align: center; }
 .hud-stats small { display: block; color: var(--muted); font-size: 11px; }
 .hud-stats b { font-variant-numeric: tabular-nums; }
+.hud-gauge { cursor: pointer; }
+.hud-center {
+  grid-column: 1 / -1; justify-self: center; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+}
+.center-btn.busy { border-color: #80ed99; color: #80ed99; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) { .center-btn.busy { animation: none; } }
 .hud-peaks { grid-column: 1 / -1; font-size: 12px; color: var(--muted); text-align: center; }
 
 .fab-stack {
@@ -96,6 +104,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 label.check { display: flex; gap: 8px; align-items: center; color: var(--text); margin: 8px 0; }
 .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 .row > input, .row > select { flex: 1; min-width: 0; }
+.row.wrap { flex-wrap: wrap; }
 input, select, textarea {
   background: var(--panel2); border: 1px solid var(--line); color: var(--text);
   border-radius: 10px; padding: 10px 12px; font-size: 16px; width: 100%; font-family: inherit;

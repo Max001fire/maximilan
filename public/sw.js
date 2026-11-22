@@ -1,6 +1,6 @@
 // Einfacher Offline-Cache für die App-Hülle (Netzwerk zuerst)
-const CACHE = 'kurvencrew-v2';
-const SHELL = ['vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', './', 'index.html', 'styles.css', 'app.js', 'telemetry.js', 'icon.svg', 'manifest.webmanifest'];
+const CACHE = 'kurvencrew-v3';
+const SHELL = ['vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', './', 'index.html', 'styles.css', 'app.js', 'telemetry.js', 'native.js', 'config.js', 'icon.svg', 'manifest.webmanifest'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', (e) => {

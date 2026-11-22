@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KurvenCrew</string>
+    <string name="title_activity_main">KurvenCrew</string>
+    <string name="package_name">de.kurvencrew.app</string>
+    <string name="custom_url_scheme">de.kurvencrew.app</string>
+</resources>

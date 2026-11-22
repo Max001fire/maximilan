@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "build:mobile": "node scripts/build-mobile.js",
+    "ios": "npm run build:mobile && npx cap sync ios && npx cap open ios",
+    "android": "npm run build:mobile && npx cap sync android && npx cap open android"
   },
   "repository": {
     "type": "git",
@@ -18,9 +21,15 @@
   },
   "homepage": "https://github.com/Max001fire/maximilan#readme",
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
     "express": "^4.22.3",
     "leaflet": "^1.9.4",
     "ws": "^8.23.0"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
 }

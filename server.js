@@ -46,8 +46,17 @@ const userByCode = (code) => Object.values(db.users).find((u) => u.code === Stri
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+// CORS für die native App (capacitor://localhost bzw. https://localhost)
+app.use('/api', (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/vendor/leaflet', express.static(path.join(__dirname, 'node_modules', 'leaflet', 'dist')));
+app.get('/vendor/capacitor.js', (req, res) => res.sendFile(path.join(__dirname, 'node_modules', '@capacitor', 'core', 'dist', 'capacitor.js')));
 
 // ---------- Nutzer & Freunde ----------
 const COLORS = ['#ff5a36', '#2ec4b6', '#ffbf00', '#9b5de5', '#00bbf9', '#f15bb5', '#80ed99', '#fb8500'];

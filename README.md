@@ -21,6 +21,11 @@ Kurvenspots eintragen, Routen durch Kurven planen und Fahrwerte vergleichen.
 - **Vergleich** – Bestenliste mit Freunden oder allen, Gruppenergebnis nach jeder Gruppenfahrt,
   eigene Fahrtenhistorie mit Strecke auf der Karte.
 - **Freunde** – über einen 6-stelligen Freundes-Code.
+- **Zentrierpunkt der Schräglage** – Motorrad gerade halten und „⊙ Nullpunkt“ (Fahrt-Anzeige, Tacho
+  antippen oder Profil) drücken: 2 Sekunden werden Hochachse und Gyro-Drift gemittelt, danach ist
+  „gerade“ genau 0°. Bleibt gespeichert, bis du „Zurücksetzen“ drückst. Am Tacho zeigt ein Dreieck die
+  Mitte (grün = gerade).
+- **Handy-App (iOS & Android) und CarPlay** – siehe unten.
 - **Demo-Modus** (Profil) – simuliert eine Fahrt entlang der Route, zum Ausprobieren am PC.
 
 ## Starten
@@ -37,6 +42,43 @@ Die Daten liegen in `data/db.json`. Umgebungsvariablen: `PORT`, `DATA_FILE`, `OS
 Also z. B. auf einem Server hinter einem HTTPS-Proxy (Caddy, nginx) betreiben oder zum Testen einen
 Tunnel nutzen (`npx localtunnel --port 3000` o. ä.). Danach kann die App über „Zum Startbildschirm
 hinzufügen“ wie eine normale App installiert werden (PWA).
+
+## Handy-App (iOS/Android) und CarPlay
+
+Die App ist mit [Capacitor](https://capacitorjs.com) als native App verpackt (`ios/`, `android/`).
+Der Server (`npm start`) muss dafür irgendwo per **HTTPS** erreichbar sein.
+
+```bash
+npm install
+KC_SERVER=https://dein-server.de npm run ios      # baut www/, synchronisiert und öffnet Xcode
+KC_SERVER=https://dein-server.de npm run android  # dasselbe für Android Studio
+```
+
+Voraussetzungen: für iOS ein Mac mit Xcode 16+ (Mindestversion iOS 16), für Android Android Studio.
+
+### CarPlay
+
+In CarPlay zeigt KurvenCrew drei Tabs:
+
+- **Live** – Tempo, Schräglage bzw. G-Kraft, Maxima, Ø, Strecke, Zeit; Knöpfe „Fahrt starten/beenden“
+  und „⊙ Nullpunkt“ (Motorrad).
+- **Gruppe** – alle Mitfahrer mit Tempo und Entfernung.
+- **Spots** – die nächsten Kurvenspots auf der Karte, „Hinfahren“ übergibt das Ziel an Apple Karten.
+
+Damit CarPlay auch bei gesperrtem Handy weiterläuft, misst die iOS-App Tempo, Schräglage und G-Kräfte
+zusätzlich nativ (`NativeTelemetry.swift`, mit Hintergrund-Standort). Code: `ios/App/App/CarPlaySceneDelegate.swift`,
+`KCCarPlayPlugin.swift` (Brücke zur Web-App, JS-Seite in `public/native.js`).
+
+**Wichtig – Apple-Freigabe:** CarPlay-Apps brauchen eine Berechtigung von Apple. KurvenCrew nutzt die
+Kategorie *Driving Task* (`com.apple.developer.carplay-driving-task`, siehe `App.entitlements`).
+Beantragen unter https://developer.apple.com/contact/carplay/. Bis zur Freigabe:
+
+- Im **iOS-Simulator** funktioniert CarPlay trotzdem (Simulator → *I/O → External Displays → CarPlay*).
+- Für Tests auf dem **echten iPhone** in Xcode unter *Signing & Capabilities* den Eintrag
+  `CODE_SIGN_ENTITLEMENTS` entfernen (dann ohne CarPlay), sonst schlägt die Signierung fehl.
+
+Hinweis: CarPlay gibt es vor allem in Autos; bei Motorrädern nur bei einzelnen Modellen mit CarPlay-Display.
+Auf Android gibt es (noch) kein Android Auto – die Handy-App funktioniert dort normal.
 
 ## Wie werden Schräglage und G-Kräfte gemessen?
 
