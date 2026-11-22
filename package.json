@@ -1,0 +1,26 @@
+{
+  "name": "kurvencrew",
+  "version": "1.0.0",
+  "description": "Touren-App für Motorrad- und Autofahrer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Max001fire/maximilan.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Max001fire/maximilan/issues"
+  },
+  "homepage": "https://github.com/Max001fire/maximilan#readme",
+  "dependencies": {
+    "express": "^4.22.3",
+    "leaflet": "^1.9.4",
+    "ws": "^8.23.0"
+  },
+  "private": true
+}
