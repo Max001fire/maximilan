@@ -295,7 +295,7 @@ function connectRide(code) {
       state.members = new Map(msg.members.map((m) => [m.userId, m]));
       store.set('ride', msg.ride.code);
       renderRide();
-      if (msg.ride.route && msg.ride.hostId !== state.user.id) applyRoute(msg.ride.route, true);
+      if (msg.ride.route && (msg.ride.hostId !== state.user.id || !state.route)) applyRoute(msg.ride.route, msg.ride.hostId !== state.user.id);
       sendPos(true);
     } else if (msg.type === 'member') {
       const isNew = !state.members.has(msg.member.userId);
