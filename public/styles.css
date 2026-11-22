@@ -50,11 +50,23 @@ body.sheet-min { --sheet-h: 118px; }
 .hud-stats b { font-variant-numeric: tabular-nums; }
 .hud-peaks { grid-column: 1 / -1; font-size: 12px; color: var(--muted); text-align: center; }
 
-.fab {
+.fab-stack {
   position: fixed; right: 12px; bottom: calc(var(--sheet-h) + 12px); z-index: 500;
-  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
-  background: var(--panel); color: var(--text); font-size: 22px; cursor: pointer; transition: bottom .25s;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end; transition: bottom .25s;
 }
+.fab {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); font-size: 20px; cursor: pointer; box-shadow: 0 2px 8px #0006;
+}
+.map-style-menu {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px;
+  display: flex; flex-direction: column; box-shadow: 0 4px 16px #0008;
+}
+.map-style-menu button {
+  background: none; border: 0; color: var(--text); text-align: left; padding: 10px 14px; border-radius: 8px; font-size: 15px; cursor: pointer;
+}
+.map-style-menu button.on { background: var(--panel2); color: var(--accent); }
+body:not([data-basemap=dark]) .leaflet-container { background: #dfe3e8; }
 
 /* Sheet */
 .sheet {
@@ -159,7 +171,14 @@ code { background: var(--panel2); padding: 2px 6px; border-radius: 6px; font-siz
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* Karten-Marker */
-.rider-marker { display: flex; flex-direction: column; align-items: center; }
+.rider-marker { display: flex; flex-direction: column; align-items: center; position: relative; }
+.rider-marker .heading { position: absolute; top: -8px; left: 50%; width: 0; height: 50px; transform-origin: 0 25px; }
+.rider-marker .heading i {
+  position: absolute; left: -7px; top: 0; width: 0; height: 0;
+  border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 10px solid #ff5a36;
+  filter: drop-shadow(0 0 2px #000);
+}
+.leaflet-control-scale { margin-bottom: 6px !important; }
 .rider-marker .pin {
   width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 18px;
   border: 3px solid #fff; box-shadow: 0 2px 8px #0008;
@@ -184,6 +203,6 @@ code { background: var(--panel2); padding: 2px 6px; border-radius: 6px; font-siz
   body.sheet-min .panels { display: block; }
   .topbar { left: 400px; }
   .hud { left: 412px; right: auto; width: 380px; }
-  .fab { bottom: 24px; }
+  .fab-stack { bottom: 24px; }
   .toast { left: calc(50% + 200px); }
 }

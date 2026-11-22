@@ -5,6 +5,8 @@ Kurvenspots eintragen, Routen durch Kurven planen und Fahrwerte vergleichen.
 
 ## Funktionen
 
+- **Weltkarte** – weltweit zoombar, Stile Dunkel / Straßenkarte / Satellit / Gelände (🗺️), Weltansicht (🌍),
+  Fahrtrichtungspfeil und gelbe Spur, wo man langgefahren ist.
 - **Fahrzeugwahl** – Motorrad oder Auto (beim Start und jederzeit oben rechts umschaltbar).
 - **Gruppenfahrt** – Fahrt erstellen, per Link/Code einladen (`?join=CODE`). Alle Teilnehmer sehen sich
   live auf der Karte (Name, Fahrzeug, Geschwindigkeit, Entfernung).

@@ -53,16 +53,38 @@ const store = {
 };
 
 // ---------- Karte ----------
-const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([47.6, 11.3], 9);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19, subdomains: 'abcd',
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-}).addTo(map);
+const lastView = store.get('view');
+const map = L.map('map', { zoomControl: false, attributionControl: true, minZoom: 2, worldCopyJump: true })
+  .setView(lastView ? [lastView.lat, lastView.lng] : [30, 10], lastView ? lastView.zoom : 3);
+map.on('moveend', () => { const c = map.getCenter(); store.set('view', { lat: c.lat, lng: c.lng, zoom: map.getZoom() }); });
+
+// Weltkarte in mehreren Stilen
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const BASEMAPS = {
+  dark: { label: '🌙 Dunkel', layer: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd', attribution: `${OSM_ATTR} &copy; <a href="https://carto.com/">CARTO</a>` }) },
+  street: { label: '🛣️ Straßenkarte', layer: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: OSM_ATTR }) },
+  satellite: { label: '🛰️ Satellit', layer: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Bilder &copy; Esri, Maxar, Earthstar Geographics' }) },
+  terrain: { label: '⛰️ Gelände', layer: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, subdomains: 'abc', attribution: `${OSM_ATTR}, SRTM &copy; <a href="https://opentopomap.org">OpenTopoMap</a>` }) },
+};
+let baseKey = BASEMAPS[store.get('basemap')] ? store.get('basemap') : 'dark';
+function setBasemap(key) {
+  map.removeLayer(BASEMAPS[baseKey].layer);
+  baseKey = key;
+  BASEMAPS[key].layer.addTo(map).bringToBack();
+  store.set('basemap', key);
+  document.body.dataset.basemap = key;
+  $$('#mapStyleMenu button').forEach((b) => b.classList.toggle('on', b.dataset.style === key));
+}
+BASEMAPS[baseKey].layer.addTo(map);
+document.body.dataset.basemap = baseKey;
+L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
+
 const layers = {
   spots: L.layerGroup().addTo(map),
   route: L.layerGroup().addTo(map),
+  trail: L.polyline([], { color: '#ffbf00', weight: 3, opacity: 0.7, dashArray: '4 6' }).addTo(map), // wo ich langgefahren bin
+  track: L.polyline([], { color: '#2ec4b6', weight: 5, opacity: 0.9 }).addTo(map), // aufgezeichnete Fahrt
   riders: L.layerGroup().addTo(map),
-  track: L.polyline([], { color: '#2ec4b6', weight: 4, opacity: 0.8 }).addTo(map),
   marks: L.layerGroup().addTo(map),
 };
 let meMarker = null;
@@ -70,10 +92,13 @@ let meMarker = null;
 function riderIcon(m, isMe) {
   const v = VEH[m.vehicle] || VEH.motorcycle;
   const speed = m.speed ? ` · ${Math.round(m.speed)} km/h` : '';
+  // Fahrtrichtungspfeil, sobald man sich bewegt
+  const arrow = m.heading != null && m.speed > 3
+    ? `<div class="heading" style="transform:rotate(${Math.round(m.heading)}deg)"><i style="border-bottom-color:${esc(m.color || '#ff5a36')}"></i></div>` : '';
   return L.divIcon({
     className: '',
     iconSize: [80, 56], iconAnchor: [40, 18],
-    html: `<div class="rider-marker"><div class="pin" style="background:${esc(m.color || '#ff5a36')}">${v.icon}</div>
+    html: `<div class="rider-marker">${arrow}<div class="pin" style="background:${esc(m.color || '#ff5a36')}">${v.icon}</div>
       <div class="label">${isMe ? 'Ich' : esc(m.name)}${speed}</div></div>`,
   });
 }
@@ -81,7 +106,15 @@ function riderIcon(m, isMe) {
 function updateMe() {
   const p = tele.live.pos;
   if (!p || !state.user) return;
-  const m = { ...state.user, vehicle: state.vehicle, speed: tele.live.speed };
+  const m = { ...state.user, vehicle: state.vehicle, speed: tele.live.speed, heading: tele.live.heading };
+  // Spur der eigenen Bewegung (auch ohne Aufzeichnung)
+  const tr = layers.trail.getLatLngs();
+  const lastT = tr[tr.length - 1];
+  if (!lastT || haversine(lastT, p) > 10) {
+    if (lastT && haversine(lastT, p) > 5000) layers.trail.setLatLngs([]); // großer Sprung -> neu beginnen
+    layers.trail.addLatLng([p.lat, p.lng]);
+    if (tr.length > 3000) layers.trail.setLatLngs(tr.slice(-2500));
+  }
   if (!meMarker) meMarker = L.marker(p, { icon: riderIcon(m, true), zIndexOffset: 1000 }).addTo(map);
   else meMarker.setLatLng(p).setIcon(riderIcon(m, true));
   if (state.follow && (state.recording || !updateMe.centered)) {
@@ -655,6 +688,11 @@ $('#locateBtn').onclick = async () => {
   if (tele.live.pos) map.setView(tele.live.pos, Math.max(map.getZoom(), 14));
   else { await tele.requestPermissions(); tele.startSensors(); toast('Suche GPS …'); }
 };
+$('#worldBtn').onclick = () => { state.follow = false; map.flyTo([30, 10], 2, { duration: 1.2 }); };
+$('#mapStyleBtn').onclick = (e) => { e.stopPropagation(); $('#mapStyleMenu').classList.toggle('hidden'); };
+$('#mapStyleMenu').innerHTML = Object.entries(BASEMAPS).map(([k, b]) => `<button data-style="${k}" class="${k === baseKey ? 'on' : ''}">${b.label}</button>`).join('');
+$$('#mapStyleMenu button').forEach((b) => (b.onclick = () => { setBasemap(b.dataset.style); $('#mapStyleMenu').classList.add('hidden'); }));
+document.addEventListener('click', (e) => { if (!e.target.closest('#mapStyleMenu')) $('#mapStyleMenu').classList.add('hidden'); });
 $('#summaryClose').onclick = () => $('#summary').classList.add('hidden');
 
 $$('[data-pick]').forEach((b) => (b.onclick = () => {
